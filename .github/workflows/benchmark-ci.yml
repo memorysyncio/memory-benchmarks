@@ -1,0 +1,37 @@
+name: Benchmark CI & Verification
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+jobs:
+  run-benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    # Local backends only. CI runners share IP ranges, so creating an evaluation
+    # key from one is rate-limited, and the benchmark must never report a number
+    # it did not measure. The MemorySync figures in the README come from a
+    # machine that ran the full script.
+    - name: Run the benchmark (local backends)
+      env:
+        ANONYMIZED_TELEMETRY: 'False'
+      run: |
+        python benchmark.py --iterations 50 --skip-remote
+    - name: Verify the run produced its results and chart
+      run: |
+        test -f results.json || exit 1
+        test -f assets/measured_latency.png || exit 1
+        python -c "import json; r = json.load(open('results.json')); assert r['sqlite']['status'] == 'measured', r['sqlite']"
+        echo "Benchmark ran and every reported number was measured."
